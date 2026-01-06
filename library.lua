@@ -10,7 +10,7 @@ local inputService = game:GetService('UserInputService')
 local renderService = game:GetService('RunService')
 local tweenService = game:GetService('TweenService')
 local guiService = game:GetService('GuiService')
-if rconsoleprint then rconsoleprint("Loading Dollarware")end
+
 -- tween(object, {Property = 'value'}, 0.2, 1)
 local tween
 do
@@ -8455,7 +8455,7 @@ do
             'blueberry', 'grape', 'bubblegum', 'lavender', 'coffee'
         }
         
-        -- Create settings UI in a window (configs + themes + UI settings)
+        -- Create settings UI in a window (configs only)
         ui.createSettingsMenu = function(window, settings)
             settings = settings or {}
             local folderName = settings.folder or 'Configs'
@@ -8465,9 +8465,7 @@ do
             
             local menu = window:addMenu({ text = menuName })
             local section1 = menu:addSection({ text = 'Config Management', side = 'left' })
-            local section2 = menu:addSection({ text = 'Auto Settings', side = 'left' })
-            local section3 = menu:addSection({ text = 'UI Theme', side = 'right' })
-            local section4 = menu:addSection({ text = 'UI Options', side = 'right' })
+            local section2 = menu:addSection({ text = 'Options', side = 'right' })
             
             local configDropdown
             local configNameBox
@@ -8485,8 +8483,7 @@ do
             -- Config selector dropdown
             configDropdown = section1:addDropdown({ 
                 text = 'Select Config', 
-                options = cm:getConfigs(),
-                default = cm:getAutoLoad()
+                options = cm:getConfigs()
             }, function(selected)
                 if configNameBox then
                     configNameBox:setValue(selected or '')
@@ -8534,78 +8531,16 @@ do
                 refreshDropdown()
             end)
             
-            -- Auto Settings section
-            section2:addButton({ text = 'Set Auto-Load', style = 'small' }):bindToEvent('onClick', function()
-                local name = configDropdown:getSelected()
-                if name then
-                    cm:setAutoLoad(name)
-                    ui.notify({ title = 'Config', message = 'Auto-load: ' .. name, duration = 2 })
-                end
-            end)
-            
-            section2:addButton({ text = 'Clear Auto-Load', style = 'small' }):bindToEvent('onClick', function()
-                cm:setAutoLoad(nil)
-                ui.notify({ title = 'Config', message = 'Auto-load cleared', duration = 2 })
-            end)
-            
-            local autoSaveToggle = section2:addToggle({ text = 'Auto-Save (30s)', state = false })
-            autoSaveToggle:bindToEvent('onToggle', function(state)
-                if state then
-                    cm:startAutoSave(30)
-                    ui.notify({ title = 'Config', message = 'Auto-save enabled', duration = 2 })
-                else
-                    cm:stopAutoSave()
-                    ui.notify({ title = 'Config', message = 'Auto-save disabled', duration = 2 })
-                end
-            end)
-            cm:ignore('Auto Settings_Auto-Save (30s)')
-            
-            -- Theme section
-            local themeDropdown = section3:addDropdown({
-                text = 'Theme',
-                options = ui.themes,
-                default = 'grape'
-            }, function(selected)
-                ui.notify({ title = 'Theme', message = 'Theme change requires restart', duration = 3 })
-            end)
-            cm:ignore('UI Theme_Theme')
-            
-            section3:addLabel({ text = 'Themes:' })
-            section3:addLabel({ text = '🍒 cherry (red)' })
-            section3:addLabel({ text = '🍊 orange' })
-            section3:addLabel({ text = '🍋 lemon (yellow)' })
-            section3:addLabel({ text = '🍈 lime (green)' })
-            section3:addLabel({ text = '🫐 blueberry (blue)' })
-            section3:addLabel({ text = '🍇 grape (purple)' })
-            
-            -- UI Options section
-            section4:addToggle({ text = 'Show Keybind Hints', state = true, flag = '_ui_keybind_hints' })
-            section4:addToggle({ text = 'Sound Effects', state = false, flag = '_ui_sounds' })
-            section4:addToggle({ text = 'Compact Mode', state = false, flag = '_ui_compact' })
-            
-            section4:addButton({ text = 'Reset to Defaults', style = 'small' }):bindToEvent('onClick', function()
-                ui.notify({ title = 'Settings', message = 'This would reset all settings', duration = 2 })
-            end)
-            
-            section4:addButton({ text = 'Destroy UI', style = 'small' }):bindToEvent('onClick', function()
+            -- Options section
+            section2:addButton({ text = 'Destroy UI', style = 'small' }):bindToEvent('onClick', function()
                 ui.destroy()
             end)
-            
-            -- Auto-load on start
-            local autoLoadName = cm:getAutoLoad()
-            if autoLoadName then
-                task.delay(1, function()
-                    cm:loadConfig(autoLoadName)
-                    ui.notify({ title = 'Config', message = 'Auto-loaded: ' .. autoLoadName, duration = 3 })
-                end)
-            end
             
             return {
                 menu = menu,
                 refresh = refreshDropdown,
                 dropdown = configDropdown,
-                nameBox = configNameBox,
-                themeDropdown = themeDropdown
+                nameBox = configNameBox
             }
         end
         
