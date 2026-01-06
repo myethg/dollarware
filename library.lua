@@ -10,7 +10,7 @@ local inputService = game:GetService('UserInputService')
 local renderService = game:GetService('RunService')
 local tweenService = game:GetService('TweenService')
 local guiService = game:GetService('GuiService')
-
+if rconsoleprint then rconsoleprint("Loading Dollarware")end
 -- tween(object, {Property = 'value'}, 0.2, 1)
 local tween
 do
