@@ -1206,7 +1206,7 @@ do
                         tween(self['#stroke'], {Color = theme.Stroke}, 0.2, 1)
                     end,
                     MouseButton1Click = function(_, self) 
-                        self:destroy()
+                        ui.toggleVisibility()
                     end
                 },
                 buttonMin = {
@@ -7816,6 +7816,44 @@ do
         for _, v in pairs(ui.scriptCns) do v:Disconnect() end
     end
     
+    ui.hidden = false
+    ui.toggleBind = Enum.KeyCode.RightShift
+    
+    ui.toggleVisibility = function()
+        ui.hidden = not ui.hidden
+        for _, win in ipairs(ui.windows) do
+            if win.instances and win.instances.mainFrame then
+                win.instances.mainFrame.Visible = not ui.hidden
+            end
+        end
+        for _, pwin in ipairs(ui.pickerWindows) do
+            if pwin.instances and pwin.instances.main then
+                pwin.instances.main.Visible = not ui.hidden
+            end
+        end
+    end
+    
+    ui.show = function()
+        ui.hidden = false
+        for _, win in ipairs(ui.windows) do
+            if win.instances and win.instances.mainFrame then
+                win.instances.mainFrame.Visible = true
+            end
+        end
+    end
+    
+    ui.hide = function()
+        ui.hidden = true
+        for _, win in ipairs(ui.windows) do
+            if win.instances and win.instances.mainFrame then
+                win.instances.mainFrame.Visible = false
+            end
+        end
+    end
+    
+    ui.setToggleBind = function(keyCode)
+        ui.toggleBind = keyCode
+    end
     
     -- unfinished
     ui.setTheme = function(newTheme) 
@@ -7887,6 +7925,12 @@ do
         ui.hkCon = inputService.InputBegan:Connect(function(io, gpe) 
             if ((not gpe) and (io.UserInputType.Name == 'Keyboard')) then
                 local kc = io.KeyCode
+                
+                -- Toggle UI visibility bind
+                if kc == ui.toggleBind then
+                    ui.toggleVisibility()
+                    return
+                end
                 
                 for i = 1, #hotkeys do 
                     local hotkey = hotkeys[i]
@@ -8543,13 +8587,12 @@ do
                 cm:setAutoLoad(nil)
                 ui.notify({ title = 'Config', message = 'Autoload cleared', duration = 2 })
             end)
+           
             
-            -- Options section
             section2:addButton({ text = 'Destroy UI', style = 'small' }):bindToEvent('onClick', function()
                 ui.destroy()
             end)
             
-            -- Auto-load on start
             local autoLoadName = cm:getAutoLoad()
             if autoLoadName then
                 task.delay(0.5, function()
