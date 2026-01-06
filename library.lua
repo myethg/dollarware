@@ -4719,6 +4719,15 @@ do
             toggle.getState = function(self) return self.toggled end
             toggle.isEnabled = toggle.getState
             toggle.getValue = toggle.getState
+            toggle.setState = function(self, state)
+                if state then
+                    self:enable()
+                else
+                    self:disable()
+                end
+                return self
+            end
+            toggle.setValue = toggle.setState
             
             elemClasses.section.addToggle = function(self, settings, callback) 
                 if (not typeof(settings) == 'table') then
@@ -4727,10 +4736,12 @@ do
                 
                 local s_title = settings.text or 'nil'
                 local s_state = settings.state or false
+                local s_flag = settings.flag
                 
                 local toggle = toggle:new()
                 toggle.section = self 
                 toggle.name = s_title
+                toggle.flagId = s_flag
                 table.insert(self.controls, toggle)
                 
                 toggle.instances.label.Text = s_title
@@ -6173,7 +6184,8 @@ do
                 local s_min = settings.min or 0
                 local s_max = settings.max or 100
                 local s_step = settings.step or 1
-                local s_value = settings.value or s_min
+                local s_value = settings.value or settings.val or s_min
+                local s_flag = settings.flag
                 
                 
                 if (typeof(s_min) ~= 'number') then
@@ -6192,6 +6204,7 @@ do
                 local slider = slider:new()
                 slider.section = self 
                 slider.name = s_title
+                slider.flagId = s_flag
                 slider.min = s_min
                 slider.max = s_max
                 slider.step = s_step
@@ -7015,6 +7028,15 @@ do
                 return new
             end
             
+            textbox.getValue = function(self)
+                return self.instances.textBox.Text
+            end
+            
+            textbox.setValue = function(self, value)
+                self.instances.textBox.Text = tostring(value or '')
+                return self
+            end
+            
             
             elemClasses.section.addTextbox = function(self, settings, callback) 
                 if (not typeof(settings) == 'table') then
@@ -7022,14 +7044,19 @@ do
                 end
                 
                 local s_title = settings.text or 'nil'
+                local s_placeholder = settings.placeholder or ''
+                local s_default = settings.default or ''
+                local s_flag = settings.flag
                 
                 local new = textbox:new()
 
                 new.section = self 
                 new.name = s_title
+                new.flagId = s_flag
                 table.insert(self.controls, new)
                 
-                new.instances.textBox.Text = s_title
+                new.instances.textBox.PlaceholderText = s_placeholder ~= '' and s_placeholder or s_title
+                new.instances.textBox.Text = s_default
                 new.instances.controlFrame.Parent = self.instances.controlMenu
                 
                 if (typeof(callback) == 'function') then
@@ -7843,6 +7870,717 @@ do
                 end 
             end
         end)
+    end
+    
+    -- DROPDOWN CONTROL
+    do
+        local dropdown = {} do
+            dropdown.__index = dropdown
+            setmetatable(dropdown, elemClasses.baseElement)
+            dropdown.class = 'dropdown'
+            dropdown.selected = nil
+            dropdown.options = {}
+            dropdown.multiSelect = false
+            dropdown.selectedMulti = {}
+            dropdown.isOpen = false
+            
+            do
+                local instances = {} do
+                    local controlFrame = Instance.new('Frame')
+                    controlFrame.BackgroundTransparency = 1
+                    controlFrame.Name = '#control'
+                    controlFrame.Size = UDim2.new(1, 0, 0, 20)
+                    controlFrame.Visible = true
+                    controlFrame.ZIndex = 34
+                    controlFrame.ClipsDescendants = false
+                    instances.controlFrame = controlFrame
+                    
+                    local label = Instance.new('TextLabel') do
+                        label.BackgroundTransparency = 1
+                        label.Font = 'SourceSans'
+                        label.Name = '#label'
+                        label.Size = UDim2.new(0.5, 0, 1, 0)
+                        label.Text = 'Dropdown'
+                        label.TextColor3 = theme.TextPrimary
+                        label.TextSize = 14
+                        label.TextStrokeColor3 = theme.TextStroke
+                        label.TextStrokeTransparency = 0.8
+                        label.TextXAlignment = 'Left'
+                        label.ZIndex = 35
+                        label.Parent = controlFrame
+                        
+                        local padding = Instance.new('UIPadding') do
+                            padding.PaddingLeft = UDim.new(0, 6)
+                            padding.Parent = label
+                        end
+                    end
+                    instances.label = label
+                    
+                    local dropBtn = Instance.new('TextButton') do
+                        dropBtn.AnchorPoint = Vector2.new(1, 0)
+                        dropBtn.BackgroundColor3 = theme.Button1
+                        dropBtn.Font = 'SourceSans'
+                        dropBtn.Name = '#drop-btn'
+                        dropBtn.Position = UDim2.new(1, -3, 0, 2)
+                        dropBtn.Size = UDim2.new(0.45, 0, 0, 16)
+                        dropBtn.Text = 'Select...'
+                        dropBtn.TextColor3 = theme.TextPrimary
+                        dropBtn.TextSize = 12
+                        dropBtn.ZIndex = 36
+                        dropBtn.AutoButtonColor = false
+                        dropBtn.Parent = controlFrame
+                        
+                        local round = Instance.new('UICorner') do
+                            round.CornerRadius = UDim.new(0, rounding and 3 or 0)
+                            round.Parent = dropBtn
+                        end
+                        
+                        local stroke = Instance.new('UIStroke') do
+                            stroke.ApplyStrokeMode = 'Border'
+                            stroke.Color = theme.Stroke
+                            stroke.Thickness = 1
+                            stroke.Parent = dropBtn
+                        end
+                    end
+                    instances.dropBtn = dropBtn
+                    
+                    local optionFrame = Instance.new('Frame') do
+                        optionFrame.AnchorPoint = Vector2.new(1, 0)
+                        optionFrame.BackgroundColor3 = theme.Window2
+                        optionFrame.Name = '#option-frame'
+                        optionFrame.Position = UDim2.new(1, -3, 0, 20)
+                        optionFrame.Size = UDim2.new(0.45, 0, 0, 0)
+                        optionFrame.Visible = false
+                        optionFrame.ZIndex = 100
+                        optionFrame.ClipsDescendants = true
+                        optionFrame.Parent = controlFrame
+                        
+                        local round = Instance.new('UICorner') do
+                            round.CornerRadius = UDim.new(0, rounding and 3 or 0)
+                            round.Parent = optionFrame
+                        end
+                        
+                        local stroke = Instance.new('UIStroke') do
+                            stroke.ApplyStrokeMode = 'Border'
+                            stroke.Color = theme.Stroke
+                            stroke.Thickness = 1
+                            stroke.Parent = optionFrame
+                        end
+                        
+                        local layout = Instance.new('UIListLayout') do
+                            layout.FillDirection = 'Vertical'
+                            layout.SortOrder = 'LayoutOrder'
+                            layout.Parent = optionFrame
+                        end
+                    end
+                    instances.optionFrame = optionFrame
+                end
+                dropdown.baseInstances = instances
+            end
+            
+            function dropdown:new()
+                local new = setmetatable({}, self)
+                new.instances = {}
+                new.options = {}
+                new.selectedMulti = {}
+                new.optionButtons = {}
+                
+                for name, inst in pairs(self.baseInstances) do
+                    new.instances[name] = inst:Clone()
+                end
+                new.instances.label.Parent = new.instances.controlFrame
+                new.instances.dropBtn.Parent = new.instances.controlFrame
+                new.instances.optionFrame.Parent = new.instances.controlFrame
+                
+                -- Toggle dropdown
+                new.instances.dropBtn.MouseButton1Click:Connect(function()
+                    new:toggle()
+                end)
+                
+                return new
+            end
+            
+            function dropdown:toggle()
+                self.isOpen = not self.isOpen
+                self.instances.optionFrame.Visible = self.isOpen
+                if self.isOpen then
+                    local height = math.min(#self.options * 18, 120)
+                    tween(self.instances.optionFrame, {Size = UDim2.new(0.45, 0, 0, height)}, 0.2, 1)
+                else
+                    tween(self.instances.optionFrame, {Size = UDim2.new(0.45, 0, 0, 0)}, 0.2, 1)
+                end
+            end
+            
+            function dropdown:close()
+                self.isOpen = false
+                self.instances.optionFrame.Visible = false
+                self.instances.optionFrame.Size = UDim2.new(0.45, 0, 0, 0)
+            end
+            
+            function dropdown:setOptions(options)
+                self.options = options
+                -- Clear existing
+                for _, btn in pairs(self.optionButtons) do
+                    btn:Destroy()
+                end
+                self.optionButtons = {}
+                
+                for i, opt in ipairs(options) do
+                    local optBtn = Instance.new('TextButton') do
+                        optBtn.BackgroundColor3 = theme.Button2
+                        optBtn.BackgroundTransparency = 0.5
+                        optBtn.Font = 'SourceSans'
+                        optBtn.Name = '#opt-' .. opt
+                        optBtn.Size = UDim2.new(1, 0, 0, 18)
+                        optBtn.Text = opt
+                        optBtn.TextColor3 = theme.TextPrimary
+                        optBtn.TextSize = 12
+                        optBtn.ZIndex = 101
+                        optBtn.AutoButtonColor = false
+                        optBtn.LayoutOrder = i
+                        optBtn.Parent = self.instances.optionFrame
+                    end
+                    
+                    optBtn.MouseEnter:Connect(function()
+                        tween(optBtn, {BackgroundTransparency = 0}, 0.1, 1)
+                    end)
+                    optBtn.MouseLeave:Connect(function()
+                        local isSelected = self.multiSelect and self.selectedMulti[opt] or self.selected == opt
+                        tween(optBtn, {BackgroundTransparency = isSelected and 0.2 or 0.5}, 0.1, 1)
+                    end)
+                    
+                    optBtn.MouseButton1Click:Connect(function()
+                        if self.multiSelect then
+                            self.selectedMulti[opt] = not self.selectedMulti[opt]
+                            optBtn.BackgroundTransparency = self.selectedMulti[opt] and 0.2 or 0.5
+                            self:updateDisplay()
+                            self:fireEvent('onChanged', self:getSelected())
+                        else
+                            self.selected = opt
+                            self.instances.dropBtn.Text = opt
+                            self:close()
+                            self:fireEvent('onChanged', opt)
+                        end
+                    end)
+                    
+                    table.insert(self.optionButtons, optBtn)
+                end
+            end
+            
+            function dropdown:updateDisplay()
+                if self.multiSelect then
+                    local selected = {}
+                    for opt, val in pairs(self.selectedMulti) do
+                        if val then table.insert(selected, opt) end
+                    end
+                    if #selected == 0 then
+                        self.instances.dropBtn.Text = 'Select...'
+                    elseif #selected <= 2 then
+                        self.instances.dropBtn.Text = table.concat(selected, ', ')
+                    else
+                        self.instances.dropBtn.Text = #selected .. ' selected'
+                    end
+                end
+            end
+            
+            function dropdown:getSelected()
+                if self.multiSelect then
+                    local result = {}
+                    for opt, val in pairs(self.selectedMulti) do
+                        if val then table.insert(result, opt) end
+                    end
+                    return result
+                else
+                    return self.selected
+                end
+            end
+            
+            function dropdown:setSelected(value)
+                if self.multiSelect and type(value) == 'table' then
+                    self.selectedMulti = {}
+                    for _, v in ipairs(value) do
+                        self.selectedMulti[v] = true
+                    end
+                    self:updateDisplay()
+                elseif not self.multiSelect then
+                    self.selected = value
+                    self.instances.dropBtn.Text = value or 'Select...'
+                end
+            end
+        end
+        
+        elemClasses.section.addDropdown = function(self, settings, callback)
+            if not typeof(settings) == 'table' then
+                return error('expected type table for settings', 2)
+            end
+            
+            local s_title = settings.text or 'Dropdown'
+            local s_options = settings.options or {}
+            local s_default = settings.default
+            local s_multi = settings.multi or false
+            local s_flag = settings.flag
+            
+            local new = dropdown:new()
+            new.section = self
+            new.name = s_title
+            new.flagId = s_flag
+            new.multiSelect = s_multi
+            table.insert(self.controls, new)
+            
+            new.instances.label.Text = s_title
+            new:setOptions(s_options)
+            if s_default then
+                new:setSelected(s_default)
+            end
+            new.instances.controlFrame.Parent = self.instances.controlMenu
+            
+            if typeof(callback) == 'function' then
+                new:bindToEvent('onChanged', callback)
+            end
+            return new
+        end
+        
+        elemClasses.dropdown = dropdown
+    end
+    
+    -- CONFIG MANAGER SYSTEM (AUTO-SAVE ALL CONTROLS)
+    do
+        local HttpService = game:GetService('HttpService')
+        
+        ui.configManager = {
+            configFolder = 'DollarwareConfigs',
+            currentConfig = nil,
+            autoSave = false,
+            autoSaveInterval = 30,
+            autoLoadConfig = nil,
+            registeredControls = {},
+            onSaveCallbacks = {},
+            onLoadCallbacks = {},
+            ignoreList = {},
+        }
+        
+        local cm = ui.configManager
+        
+        function cm:init(folderName)
+            self.configFolder = folderName or 'DollarwareConfigs'
+            pcall(function()
+                if makefolder and not isfolder(self.configFolder) then
+                    makefolder(self.configFolder)
+                end
+            end)
+        end
+        
+        function cm:getConfigs()
+            local configs = {}
+            pcall(function()
+                if listfiles then
+                    for _, file in ipairs(listfiles(self.configFolder)) do
+                        local name = file:match('([^/\\]+)%.json$')
+                        if name and name ~= '_autoload' then
+                            table.insert(configs, name)
+                        end
+                    end
+                end
+            end)
+            return configs
+        end
+        
+        -- Ignore a control from auto-saving (by flagId)
+        function cm:ignore(flagId)
+            self.ignoreList[flagId] = true
+        end
+        
+        -- Manually register a control with custom getter/setter
+        function cm:registerControl(flagId, getter, setter)
+            self.registeredControls[flagId] = {
+                get = getter,
+                set = setter
+            }
+        end
+        
+        -- Auto-collect all controls from all windows
+        function cm:getAllControls()
+            local allControls = {}
+            
+            for _, window in ipairs(windows) do
+                if window.menus then
+                    for _, menu in ipairs(window.menus) do
+                        if menu.sections then
+                            for _, section in ipairs(menu.sections) do
+                                if section.controls then
+                                    for _, control in ipairs(section.controls) do
+                                        if control.flagId and not self.ignoreList[control.flagId] then
+                                            allControls[control.flagId] = control
+                                        elseif control.name and not self.ignoreList[control.name] then
+                                            -- Use control name + section name as fallback ID
+                                            local fallbackId = (section.name or 'section') .. '_' .. (control.name or 'control')
+                                            if not self.ignoreList[fallbackId] then
+                                                allControls[fallbackId] = control
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+            
+            return allControls
+        end
+        
+        -- Get value from a control based on its class
+        function cm:getControlValue(control)
+            local class = control.class
+            
+            if class == 'toggle' then
+                return control:getState()
+            elseif class == 'slider' then
+                return control:getValue()
+            elseif class == 'dropdown' then
+                return control:getSelected()
+            elseif class == 'textbox' then
+                return control:getValue()
+            elseif class == 'picker' then
+                -- Color picker - save as RGB table
+                if control.color then
+                    return {control.color.R * 255, control.color.G * 255, control.color.B * 255}
+                end
+            end
+            
+            return nil
+        end
+        
+        -- Set value to a control based on its class
+        function cm:setControlValue(control, value)
+            local class = control.class
+            
+            if class == 'toggle' then
+                if value then
+                    control:enable()
+                else
+                    control:disable()
+                end
+                control:fireEvent('onToggle', value)
+            elseif class == 'slider' then
+                control:setValue(value)
+            elseif class == 'dropdown' then
+                control:setSelected(value)
+                control:fireEvent('onChanged', value)
+            elseif class == 'textbox' then
+                control:setValue(value)
+            elseif class == 'picker' then
+                -- Color picker - load from RGB table
+                if type(value) == 'table' and #value >= 3 then
+                    local color = Color3.fromRGB(value[1], value[2], value[3])
+                    if control.setColor then
+                        control:setColor(color)
+                    end
+                end
+            end
+        end
+        
+        function cm:saveConfig(name)
+            if not name or name == '' then return false end
+            
+            local data = {}
+            
+            -- Auto-collect all controls
+            local allControls = self:getAllControls()
+            for flagId, control in pairs(allControls) do
+                pcall(function()
+                    local value = self:getControlValue(control)
+                    if value ~= nil then
+                        data[flagId] = value
+                    end
+                end)
+            end
+            
+            -- Save manually registered controls
+            for flagId, info in pairs(self.registeredControls) do
+                pcall(function()
+                    data[flagId] = info.get()
+                end)
+            end
+            
+            -- Call custom save callbacks
+            for _, callback in ipairs(self.onSaveCallbacks) do
+                pcall(function()
+                    local extra = callback()
+                    if type(extra) == 'table' then
+                        for k, v in pairs(extra) do
+                            data[k] = v
+                        end
+                    end
+                end)
+            end
+            
+            pcall(function()
+                if writefile then
+                    writefile(self.configFolder .. '/' .. name .. '.json', HttpService:JSONEncode(data))
+                end
+            end)
+            
+            self.currentConfig = name
+            return true
+        end
+        
+        function cm:loadConfig(name)
+            if not name then return false end
+            
+            local success, data = pcall(function()
+                if readfile and isfile(self.configFolder .. '/' .. name .. '.json') then
+                    return HttpService:JSONDecode(readfile(self.configFolder .. '/' .. name .. '.json'))
+                end
+            end)
+            
+            if not success or not data then return false end
+            
+            -- Auto-collect all controls
+            local allControls = self:getAllControls()
+            for flagId, control in pairs(allControls) do
+                if data[flagId] ~= nil then
+                    pcall(function()
+                        self:setControlValue(control, data[flagId])
+                    end)
+                end
+            end
+            
+            -- Load manually registered controls
+            for flagId, info in pairs(self.registeredControls) do
+                if data[flagId] ~= nil then
+                    pcall(function()
+                        info.set(data[flagId])
+                    end)
+                end
+            end
+            
+            -- Call custom load callbacks
+            for _, callback in ipairs(self.onLoadCallbacks) do
+                pcall(function()
+                    callback(data)
+                end)
+            end
+            
+            self.currentConfig = name
+            return true
+        end
+        
+        function cm:deleteConfig(name)
+            pcall(function()
+                if delfile then
+                    delfile(self.configFolder .. '/' .. name .. '.json')
+                end
+            end)
+        end
+        
+        function cm:setAutoLoad(name)
+            self.autoLoadConfig = name
+            pcall(function()
+                if writefile then
+                    writefile(self.configFolder .. '/_autoload.txt', name or '')
+                end
+            end)
+        end
+        
+        function cm:getAutoLoad()
+            local name = nil
+            pcall(function()
+                if readfile and isfile(self.configFolder .. '/_autoload.txt') then
+                    name = readfile(self.configFolder .. '/_autoload.txt')
+                    if name == '' then name = nil end
+                end
+            end)
+            return name
+        end
+        
+        function cm:startAutoSave(interval)
+            self.autoSave = true
+            self.autoSaveInterval = interval or 30
+            task.spawn(function()
+                while self.autoSave do
+                    task.wait(self.autoSaveInterval)
+                    if self.currentConfig and self.autoSave then
+                        self:saveConfig(self.currentConfig)
+                    end
+                end
+            end)
+        end
+        
+        function cm:stopAutoSave()
+            self.autoSave = false
+        end
+        
+        function cm:onSave(callback)
+            table.insert(self.onSaveCallbacks, callback)
+        end
+        
+        function cm:onLoad(callback)
+            table.insert(self.onLoadCallbacks, callback)
+        end
+        
+        -- Available themes
+        ui.themes = {
+            'cherry', 'orange', 'lemon', 'lime', 'raspberry', 
+            'blueberry', 'grape', 'bubblegum', 'lavender', 'coffee'
+        }
+        
+        -- Create settings UI in a window (configs + themes + UI settings)
+        ui.createSettingsMenu = function(window, settings)
+            settings = settings or {}
+            local folderName = settings.folder or 'Configs'
+            local menuName = settings.menuName or 'Settings'
+            
+            cm:init(folderName)
+            
+            local menu = window:addMenu({ text = menuName })
+            local section1 = menu:addSection({ text = 'Config Management', side = 'left' })
+            local section2 = menu:addSection({ text = 'Auto Settings', side = 'left' })
+            local section3 = menu:addSection({ text = 'UI Theme', side = 'right' })
+            local section4 = menu:addSection({ text = 'UI Options', side = 'right' })
+            
+            local configDropdown
+            local configNameBox
+            
+            local function refreshDropdown()
+                if configDropdown then
+                    configDropdown:setOptions(cm:getConfigs())
+                end
+            end
+            
+            -- Config name input
+            configNameBox = section1:addTextbox({ text = 'Config Name', placeholder = 'Enter name...' })
+            cm:ignore('Config Management_Config Name')
+            
+            -- Config selector dropdown
+            configDropdown = section1:addDropdown({ 
+                text = 'Select Config', 
+                options = cm:getConfigs(),
+                default = cm:getAutoLoad()
+            }, function(selected)
+                if configNameBox then
+                    configNameBox:setValue(selected or '')
+                end
+            end)
+            cm:ignore('Config Management_Select Config')
+            
+            -- Config Buttons
+            section1:addButton({ text = 'Create New', style = 'small' }):bindToEvent('onClick', function()
+                local name = configNameBox:getValue()
+                if name and name ~= '' then
+                    cm:saveConfig(name)
+                    refreshDropdown()
+                    configDropdown:setSelected(name)
+                    ui.notify({ title = 'Config', message = 'Created: ' .. name, duration = 2 })
+                end
+            end)
+            
+            section1:addButton({ text = 'Save', style = 'small' }):bindToEvent('onClick', function()
+                local name = configDropdown:getSelected() or configNameBox:getValue()
+                if name and name ~= '' then
+                    cm:saveConfig(name)
+                    ui.notify({ title = 'Config', message = 'Saved: ' .. name, duration = 2 })
+                end
+            end)
+            
+            section1:addButton({ text = 'Load', style = 'small' }):bindToEvent('onClick', function()
+                local name = configDropdown:getSelected()
+                if name then
+                    cm:loadConfig(name)
+                    ui.notify({ title = 'Config', message = 'Loaded: ' .. name, duration = 2 })
+                end
+            end)
+            
+            section1:addButton({ text = 'Delete', style = 'small' }):bindToEvent('onClick', function()
+                local name = configDropdown:getSelected()
+                if name then
+                    cm:deleteConfig(name)
+                    refreshDropdown()
+                    ui.notify({ title = 'Config', message = 'Deleted: ' .. name, duration = 2 })
+                end
+            end)
+            
+            section1:addButton({ text = 'Refresh', style = 'small' }):bindToEvent('onClick', function()
+                refreshDropdown()
+            end)
+            
+            -- Auto Settings section
+            section2:addButton({ text = 'Set Auto-Load', style = 'small' }):bindToEvent('onClick', function()
+                local name = configDropdown:getSelected()
+                if name then
+                    cm:setAutoLoad(name)
+                    ui.notify({ title = 'Config', message = 'Auto-load: ' .. name, duration = 2 })
+                end
+            end)
+            
+            section2:addButton({ text = 'Clear Auto-Load', style = 'small' }):bindToEvent('onClick', function()
+                cm:setAutoLoad(nil)
+                ui.notify({ title = 'Config', message = 'Auto-load cleared', duration = 2 })
+            end)
+            
+            local autoSaveToggle = section2:addToggle({ text = 'Auto-Save (30s)', state = false })
+            autoSaveToggle:bindToEvent('onToggle', function(state)
+                if state then
+                    cm:startAutoSave(30)
+                    ui.notify({ title = 'Config', message = 'Auto-save enabled', duration = 2 })
+                else
+                    cm:stopAutoSave()
+                    ui.notify({ title = 'Config', message = 'Auto-save disabled', duration = 2 })
+                end
+            end)
+            cm:ignore('Auto Settings_Auto-Save (30s)')
+            
+            -- Theme section
+            local themeDropdown = section3:addDropdown({
+                text = 'Theme',
+                options = ui.themes,
+                default = 'grape'
+            }, function(selected)
+                ui.notify({ title = 'Theme', message = 'Theme change requires restart', duration = 3 })
+            end)
+            cm:ignore('UI Theme_Theme')
+            
+            section3:addLabel({ text = 'Themes:' })
+            section3:addLabel({ text = '🍒 cherry (red)' })
+            section3:addLabel({ text = '🍊 orange' })
+            section3:addLabel({ text = '🍋 lemon (yellow)' })
+            section3:addLabel({ text = '🍈 lime (green)' })
+            section3:addLabel({ text = '🫐 blueberry (blue)' })
+            section3:addLabel({ text = '🍇 grape (purple)' })
+            
+            -- UI Options section
+            section4:addToggle({ text = 'Show Keybind Hints', state = true, flag = '_ui_keybind_hints' })
+            section4:addToggle({ text = 'Sound Effects', state = false, flag = '_ui_sounds' })
+            section4:addToggle({ text = 'Compact Mode', state = false, flag = '_ui_compact' })
+            
+            section4:addButton({ text = 'Reset to Defaults', style = 'small' }):bindToEvent('onClick', function()
+                ui.notify({ title = 'Settings', message = 'This would reset all settings', duration = 2 })
+            end)
+            
+            section4:addButton({ text = 'Destroy UI', style = 'small' }):bindToEvent('onClick', function()
+                ui.destroy()
+            end)
+            
+            -- Auto-load on start
+            local autoLoadName = cm:getAutoLoad()
+            if autoLoadName then
+                task.delay(1, function()
+                    cm:loadConfig(autoLoadName)
+                    ui.notify({ title = 'Config', message = 'Auto-loaded: ' .. autoLoadName, duration = 3 })
+                end)
+            end
+            
+            return {
+                menu = menu,
+                refresh = refreshDropdown,
+                dropdown = configDropdown,
+                nameBox = configNameBox,
+                themeDropdown = themeDropdown
+            }
+        end
+        
+        -- Alias for backwards compatibility
+        ui.createConfigMenu = ui.createSettingsMenu
     end
 end
 
