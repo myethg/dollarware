@@ -6778,10 +6778,16 @@ do
                             tween(inst, {BackgroundColor3 = theme.Button1, TextColor3 = theme.TextPrimary}, 0.2, 1)
                         end
                         
-                        -- Store the value and show the name
+                        -- Store the value
                         local inputText = inst.Text
-                        obj.storedValue = inputText  -- Store the actual value
-                        inst.Text = obj.name  -- Display the name/label
+                        obj.storedValue = inputText
+                        
+                        -- Show value if not empty, otherwise show name/label
+                        if inputText and inputText ~= '' then
+                            inst.Text = inputText  -- Keep showing the typed value
+                        else
+                            inst.Text = obj.name  -- Show label if empty
+                        end
                         
                         obj:fireEvent('onFocusLost', inputText)
                     end,
@@ -7037,11 +7043,11 @@ do
             
             textbox.setValue = function(self, value)
                 self.storedValue = tostring(value or '')
-                -- If not focused, show the name; if focused, show the value
-                if not self.focused then
-                    self.instances.textBox.Text = self.name or ''
-                else
+                -- Show the value if not empty, otherwise show name
+                if self.storedValue ~= '' then
                     self.instances.textBox.Text = self.storedValue
+                else
+                    self.instances.textBox.Text = self.name or ''
                 end
                 return self
             end
@@ -7066,7 +7072,8 @@ do
                 table.insert(self.controls, new)
                 
                 new.instances.textBox.PlaceholderText = s_placeholder ~= '' and s_placeholder or s_title
-                new.instances.textBox.Text = s_title  -- Show the label name initially
+                -- Show default value if provided, otherwise show label
+                new.instances.textBox.Text = s_default ~= '' and s_default or s_title
                 new.instances.controlFrame.Parent = self.instances.controlMenu
                 
                 if (typeof(callback) == 'function') then
