@@ -8531,10 +8531,32 @@ do
                 refreshDropdown()
             end)
             
+            section1:addButton({ text = 'Set as Autoload', style = 'small' }):bindToEvent('onClick', function()
+                local name = configDropdown:getSelected()
+                if name then
+                    cm:setAutoLoad(name)
+                    ui.notify({ title = 'Config', message = 'Autoload set: ' .. name, duration = 2 })
+                end
+            end)
+            
+            section1:addButton({ text = 'Reset Autoload', style = 'small' }):bindToEvent('onClick', function()
+                cm:setAutoLoad(nil)
+                ui.notify({ title = 'Config', message = 'Autoload cleared', duration = 2 })
+            end)
+            
             -- Options section
             section2:addButton({ text = 'Destroy UI', style = 'small' }):bindToEvent('onClick', function()
                 ui.destroy()
             end)
+            
+            -- Auto-load on start
+            local autoLoadName = cm:getAutoLoad()
+            if autoLoadName then
+                task.delay(0.5, function()
+                    cm:loadConfig(autoLoadName)
+                    ui.notify({ title = 'Config', message = 'Auto-loaded: ' .. autoLoadName, duration = 2 })
+                end)
+            end
             
             return {
                 menu = menu,
