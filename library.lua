@@ -7664,12 +7664,24 @@ do
     ui.notifs = {}
     ui.hotkeys = {}
     ui.scriptCns = {}
+    ui.themedInstances = {}  -- Track all themed instances for instant theme updates
     
     ui.autoDisableToggles = true
     
     local windows = ui.windows
     local pickerWindows = ui.pickerWindows
     local notifs = ui.notifs
+    local themedInstances = ui.themedInstances
+    
+    -- Helper to register a themed instance
+    local function registerThemed(instance, property, themeKey)
+        table.insert(themedInstances, {
+            instance = instance,
+            property = property,
+            themeKey = themeKey
+        })
+    end
+    ui.registerThemed = registerThemed
     
     ui.newWindow = function(settings) 
         if (typeof(settings) ~= 'table') then
@@ -7980,6 +7992,7 @@ do
             
             function dropdown:new()
                 local new = setmetatable({}, self)
+                new.binds = {}  -- Required for bindToEvent/fireEvent
                 new.instances = {}
                 new.options = {}
                 new.selectedMulti = {}
