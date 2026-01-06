@@ -6750,7 +6750,9 @@ do
                 textBox = {
                     Focused = function(inst, obj) 
                         obj.focused = true
-                        --obj:showHint()
+                        -- Show the stored value when editing starts
+                        inst.Text = obj.storedValue or ''
+                        
                         obj.textUpdCn = inst:GetPropertyChangedSignal('Text'):Connect(function() 
                             obj:fireEvent('onTextChange', inst.Text)
                             obj:fireEvent('__txtUpdInternal', inst.Text)
@@ -6766,7 +6768,6 @@ do
                     end,
                     FocusLost = function(inst, obj) 
                         obj.focused = false
-                        --obj:hideHint()
                         if (obj.textUpdCn) then 
                             obj.textUpdCn:Disconnect()
                         end
@@ -6777,9 +6778,10 @@ do
                             tween(inst, {BackgroundColor3 = theme.Button1, TextColor3 = theme.TextPrimary}, 0.2, 1)
                         end
                         
-                        
+                        -- Store the value and show the name
                         local inputText = inst.Text
-                        inst.Text = obj.name
+                        obj.storedValue = inputText  -- Store the actual value
+                        inst.Text = obj.name  -- Display the name/label
                         
                         obj:fireEvent('onFocusLost', inputText)
                     end,
@@ -7010,6 +7012,7 @@ do
                 
                 local new = setmetatable({}, self)
                 new.binds = {}
+                new.storedValue = ''  -- Store the actual value separately
                 
                 local instances = {}
                 instances.controlFrame = self.instances.controlFrame:Clone()
@@ -7029,11 +7032,17 @@ do
             end
             
             textbox.getValue = function(self)
-                return self.instances.textBox.Text
+                return self.storedValue or ''
             end
             
             textbox.setValue = function(self, value)
-                self.instances.textBox.Text = tostring(value or '')
+                self.storedValue = tostring(value or '')
+                -- If not focused, show the name; if focused, show the value
+                if not self.focused then
+                    self.instances.textBox.Text = self.name or ''
+                else
+                    self.instances.textBox.Text = self.storedValue
+                end
                 return self
             end
             
@@ -7053,10 +7062,11 @@ do
                 new.section = self 
                 new.name = s_title
                 new.flagId = s_flag
+                new.storedValue = s_default  -- Store the default value
                 table.insert(self.controls, new)
                 
                 new.instances.textBox.PlaceholderText = s_placeholder ~= '' and s_placeholder or s_title
-                new.instances.textBox.Text = s_default
+                new.instances.textBox.Text = s_title  -- Show the label name initially
                 new.instances.controlFrame.Parent = self.instances.controlMenu
                 
                 if (typeof(callback) == 'function') then
@@ -7912,7 +7922,7 @@ do
                         label.Font = 'SourceSans'
                         label.Name = '#label'
                         label.Size = UDim2.new(0.5, 0, 1, 0)
-                        label.Text = 'Dropdown'
+                        label.Text = ''
                         label.TextColor3 = theme.TextPrimary
                         label.TextSize = 14
                         label.TextStrokeColor3 = theme.TextStroke
