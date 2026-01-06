@@ -7,4 +7,4 @@ continued dev of the original dollarware
 
 
 ## docs
-![](https://github.com/myethg/dollarware/blob/main/docs.md)
+[docs](https://github.com/myethg/dollarware/blob/main/docs.md)
